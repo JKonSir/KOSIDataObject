@@ -1,0 +1,4 @@
+rootProject.name = 'KOSIDataObject'
+include 'KOSIDataObject-api'
+include 'KOSIDataObject-impl'
+include 'common'

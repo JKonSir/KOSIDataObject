@@ -1,0 +1,135 @@
+ext {
+    springVersion = "4.2.5.RELEASE"
+    hibernateVersion = "5.1.0.Final"
+
+    distDir = "$rootDir/dist"
+}
+
+allprojects {
+    apply plugin: 'java'
+    group = 'org.kosi'
+    version = '3.0.0'
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'postgresql:postgresql:9.1-901.jdbc4'
+    }
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+
+        // java dependencies
+
+        compile "javax.inject:javax.inject:1"
+
+        // spring dependencies
+
+        compile "org.springframework:spring-context:${springVersion}",
+                "org.springframework:spring-orm:${springVersion}"
+
+        // hibernate dependencies
+
+        compile "org.hibernate:hibernate-core:${hibernateVersion}"
+
+        // other dependencies
+
+        compile "com.fasterxml.jackson.core:jackson-annotations:2.7.4"
+
+    }
+}
+
+project(':common') {
+    task createPatch(type: Zip) {
+        archiveName = "KOSIDataObject-install-${project.version}.zip"
+        from("$rootDir/common/src/main/resources")
+        destinationDir file("$distDir")
+    }
+    task createInstallScript(dependsOn: 'createPatch') {
+        File installScript = file("$distDir/build.gradle");
+        installScript.text = "import groovy.sql.Sql\n" +
+                "\n" +
+                "repositories {\n" +
+                "\tmavenCentral()\n" +
+                "}\n" +
+                "\n" +
+                "configurations {\n" +
+                "\tjdbcdriver\n" +
+                "}\n" +
+                "\n" +
+                "dependencies {\n" +
+                "\tjdbcdriver 'postgresql:postgresql:9.1-901.jdbc4'\n" +
+                "}\n" +
+                "\n" +
+                "task unzip(type: Copy){\n" +
+                "\tfrom zipTree(\"KOSIDataObject-install-${project.version}.zip\")\n" +
+                "\tdestinationDir file(\"KOSIApp.ear\")}\n" +
+                "\n" +
+                "task connect(dependsOn: unzip) {\n" +
+                "\n" +
+                "\tconfigurations.jdbcdriver.files.each {\n" +
+                "\t\tSql.classLoader.addURL(it.toURI().toURL())\n" +
+                "\t}\n" +
+                "\tdef db = [\n" +
+                "\t\turl: 'jdbc:postgresql://localhost:5432/testdb',\n" +
+                "\t\tuser: 'test_user',\n" +
+                "\t\tpassword: 'qwerty',\n" +
+                "\t\tdriver: 'org.postgresql.Driver'\n" +
+                "\t]\n" +
+                "\tdef sql = Sql.newInstance(db.url, db.user, db.password, db.driver)\n" +
+                "\tString sqlFilePath = \"KOSIApp.ear/postgres/init.sql\"\n" +
+                "\tString sqlString = new File(sqlFilePath).text\n" +
+                "\tsql.execute(sqlString)\n" +
+                "\tsql.close()\n" +
+                "}"
+    }
+    task archivePatch(type: Zip, dependsOn: 'createInstallScript') {
+        archiveName = "KOSIDataObject-patch-${project.version}.zip"
+        from("$rootDir/dist/KOSIDataObject-install-${project.version}.zip",
+                "$distDir/build.gradle")
+        destinationDir file("$distDir")
+    }
+    tasks.build.dependsOn('archivePatch')
+    dependencies {
+
+        // product dependencies
+
+        compile project(':KOSIDataObject-api')
+
+    }
+}
+
+project(':KOSIDataObject-api') {
+
+    tasks.withType(Jar) {
+        destinationDir = file("$rootDir/common/src/main/resources/APP-INF/classes/lib")
+    }
+}
+
+project(':KOSIDataObject-impl') {
+    tasks.withType(Jar) {
+        destinationDir = file("$rootDir/common/src/main/resources/APP-INF/classes/lib")
+    }
+
+    dependencies {
+
+        // product dependencies
+
+        compile project(':KOSIDataObject-api')
+
+    }
+}
+
+clean {
+    delete "$rootDir/common/src/main/resources/APP-INF/classes/lib"
+    delete fileTree(dir: "$rootDir/dist")
+    delete "$rootDir/iiii.gradle"
+}
